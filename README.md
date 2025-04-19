@@ -102,6 +102,63 @@ In your Vercel project settings (or during deployment), add all the necessary en
 4. `POSTGRES_URL`: Set this to your production database URL.
 5. `AUTH_SECRET`: Set this to a random string. `openssl rand -base64 32` will generate one.
 
+## Tenders API
+
+This project includes a Tenders API that was migrated from Python FastAPI to Next.js API routes. It provides the following endpoints:
+
+### API Endpoints
+
+- `GET /api` - Welcome page with available endpoints information
+- `GET /api/tenders` - Get filtered tenders from Elasticsearch
+   - Query parameters:
+     - `agencyName`: Filter by agency name
+     - `tenderActivityId`: Filter by tender activity ID
+     - `tenderAreasId`: Filter by tender area ID
+     - `limit`: Number of results to return (default: 50)
+     - `page`: Page number for pagination (default: 1)
+
+- `GET /api/synctenders` - Sync tenders from external API to Elasticsearch
+   - Query parameters:
+     - `fields`: Comma-separated list of fields to return (default: tenderId,tenderName,tenderNumber,agencyName,tenderIdString)
+     - `TenderActivityId`: Filter by tender activity ID
+     - `PageSize`: Number of results to fetch from external API
+     - `TenderCategory`: Filter by tender category (2 = open, 8 = closed)
+     - `TenderAreasIdString`: Filter by tender area ID
+
+### Requirements
+
+- Elasticsearch 8.x running on `http://localhost:9200` (configurable via environment variable)
+- PostgreSQL database (for logging operations)
+
+Make sure to add the following environment variable to your `.env` file:
+
+```
+ELASTICSEARCH_URL=http://localhost:9200
+```
+
+And update the docker-compose.yml file to include Elasticsearch:
+
+```yaml
+services:
+  # ... existing services
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: next_saas_starter_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+volumes:
+  # ... existing volumes
+  elasticsearch_data:
+```
+
 ## Other Templates
 
 While this template is intentionally minimal and to be used as a learning resource, there are other paid versions in the community which are more full-featured:

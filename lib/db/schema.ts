@@ -68,6 +68,13 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+export const syncLogs = pgTable('sync_logs', {
+  id: serial('id').primaryKey(),
+  syncTime: timestamp('sync_time').defaultNow(),
+  totalTenders: integer('total_tenders'),
+  newTendersCount: integer('new_tenders_count')
+});
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
