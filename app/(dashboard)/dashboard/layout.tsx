@@ -1,10 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Users, Settings, Shield, Activity, Menu, Database } from 'lucide-react';
+import { 
+  BarChart3, 
+  BookmarkIcon, 
+  RefreshCw, 
+  Menu
+} from 'lucide-react';
 
 export default function DashboardLayout({
   children
@@ -13,61 +18,79 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  // This would need to be replaced with actual admin check
+  useEffect(() => {
+    // Simulate admin check
+    setIsAdmin(true);
+  }, []);
 
   const navItems = [
-    { href: '/dashboard', icon: Users, label: 'Team' },
-    { href: '/dashboard/tenders', icon: Database, label: 'Tenders' },
-    { href: '/dashboard/general', icon: Settings, label: 'General' },
-    { href: '/dashboard/activity', icon: Activity, label: 'Activity' },
-    { href: '/dashboard/security', icon: Shield, label: 'Security' }
+    { 
+      href: '/dashboard/tenders', 
+      icon: BarChart3, 
+      label: 'Overview',
+      description: 'See all tenders and insights'
+    },
+    { 
+      href: '/dashboard/tenders/saved', 
+      icon: BookmarkIcon, 
+      label: 'Saved Filters',
+      description: 'Your saved searches and filters'
+    },
+    ...(isAdmin ? [{
+      href: '/dashboard/tenders/sync', 
+      icon: RefreshCw, 
+      label: 'Sync Tenders',
+      description: 'Manage tender synchronization'
+    }] : [])
   ];
 
   return (
-    <div className="flex flex-col min-h-[calc(100dvh-68px)] max-w-7xl mx-auto w-full">
-      {/* Mobile header */}
-      <div className="lg:hidden flex items-center justify-between bg-white border-b border-gray-200 p-4">
-        <div className="flex items-center">
-          <span className="font-medium">Settings</span>
-        </div>
+    <div className="container py-4">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">Tenders Dashboard</h1>
         <Button
-          className="-mr-3"
-          variant="ghost"
+          variant="outline"
+          size="icon"
+          className="md:hidden"
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         >
-          <Menu className="h-6 w-6" />
-          <span className="sr-only">Toggle sidebar</span>
+          <Menu className="h-4 w-4" />
+          <span className="sr-only">Toggle navigation</span>
         </Button>
       </div>
-
-      <div className="flex flex-1 overflow-hidden h-full">
-        {/* Sidebar */}
-        <aside
-          className={`w-64 bg-white lg:bg-gray-50 border-r border-gray-200 lg:block ${
-            isSidebarOpen ? 'block' : 'hidden'
-          } lg:relative absolute inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
-          <nav className="h-full overflow-y-auto p-4">
+      
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <aside className={`md:col-span-3 lg:col-span-2 ${isSidebarOpen ? 'block' : 'hidden'} md:block`}>
+          <nav className="space-y-1 sticky top-4">
             {navItems.map((item) => (
-              <Link key={item.href} href={item.href} passHref>
+              <Link 
+                key={item.href} 
+                href={item.href}
+                className="block mb-1"
+              >
                 <Button
-                  variant={pathname === item.href ? 'secondary' : 'ghost'}
-                  className={`shadow-none my-1 w-full justify-start ${
-                    pathname === item.href ? 'bg-gray-100' : ''
-                  }`}
+                  variant={pathname.startsWith(item.href) ? 'default' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
                   onClick={() => setIsSidebarOpen(false)}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="mr-2 h-4 w-4" />
                   {item.label}
                 </Button>
+                <p className="text-xs text-muted-foreground ml-7 hidden lg:block">
+                  {item.description}
+                </p>
               </Link>
             ))}
           </nav>
         </aside>
-
-        {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-0 lg:p-4">{children}</main>
+        
+        <main className="md:col-span-9 lg:col-span-10">
+          {children}
+        </main>
       </div>
     </div>
   );
