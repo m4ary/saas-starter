@@ -1,21 +1,39 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SyncSettings } from "@/lib/utils";
+import { RefreshCw, Loader2 } from "lucide-react";
 
 interface SyncSettingsProps {
-  onSave: (settings: SyncSettings) => void;
+  onSave?: (settings: SyncSettings) => void;
+  onSync?: (settings: SyncSettings) => void;
   defaultSettings?: SyncSettings;
+  isLoading?: boolean;
 }
 
-export function SyncSettingsForm({ onSave, defaultSettings }: SyncSettingsProps) {
+export function SyncSettingsForm({ onSave, onSync, defaultSettings, isLoading = false }: SyncSettingsProps) {
   const [settings, setSettings] = useState<SyncSettings>(defaultSettings || {});
 
+  // Update parent component whenever settings change
+  useEffect(() => {
+    if (onSave) {
+      onSave(settings);
+    }
+  }, [settings, onSave]);
+
   const handleSave = () => {
-    onSave(settings);
+    if (onSave) {
+      onSave(settings);
+    }
+  };
+
+  const handleSync = () => {
+    if (onSync) {
+      onSync(settings);
+    }
   };
 
   // Helper to convert "all" placeholders back to null
@@ -143,8 +161,15 @@ export function SyncSettingsForm({ onSave, defaultSettings }: SyncSettingsProps)
         </div>
       </CardContent>
       <CardFooter className="flex justify-between">
-        <Button variant="outline" onClick={() => setSettings({})}>Reset</Button>
-        <Button onClick={handleSave}>Save Settings</Button>
+        <Button variant="outline" onClick={() => setSettings({})} disabled={isLoading}>Reset</Button>
+        {onSync ? (
+          <Button onClick={handleSync} disabled={isLoading} className="gap-2">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {isLoading ? "Syncing..." : "Sync Now"}
+          </Button>
+        ) : (
+          <Button onClick={handleSave} disabled={isLoading}>Save Settings</Button>
+        )}
       </CardFooter>
     </Card>
   );

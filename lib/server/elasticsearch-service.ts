@@ -215,22 +215,81 @@ export async function syncTenders(settings?: SyncSettings) {
     console.log(`Fetching from: ${apiUrlWithParams}`);
     
     try {
+      // Try with more options to handle potential CORS or proxy issues
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       const response = await fetch(apiUrlWithParams, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; SaaS-Tenders/1.0)'
+        },
+        cache: 'no-store',
+        next: { revalidate: 0 },
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+      
+      console.log(`API Response status: ${response.status} ${response.statusText}`);
+      
       if (!response.ok) {
-        throw new Error(`API responded with status ${response.status}`);
+        // Try to get more error details
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Could not read error response body';
+        }
+        
+        throw new Error(`API responded with status ${response.status}: ${errorText.substring(0, 500)}`);
       }
       
-      const data = await response.json();
-      const tenders = data.results || [];
+      let data;
+      try {
+        data = await response.json();
+        console.log(`API response data format: ${JSON.stringify(Object.keys(data))}`);
+      } catch (jsonError) {
+        const responseText = await response.text();
+        console.error('Error parsing JSON response:', jsonError);
+        console.log('Raw response (first 500 chars):', responseText.substring(0, 500));
+        
+        throw new Error(`Failed to parse API response as JSON: ${(jsonError as Error).message}`);
+      }
+      
+      // Verify the expected data structure
+      // Support both "results" and "data" array formats from the API
+      const resultsArray = Array.isArray(data.results) ? data.results : 
+                          (Array.isArray(data.data) ? data.data : null);
+      
+      if (!data || !resultsArray) {
+        console.error('Unexpected API response structure:', JSON.stringify(data).substring(0, 1000));
+        return {
+          success: false,
+          message: 'Unexpected API response format: neither results nor data array found'
+        };
+      }
+      
+      const tenders = resultsArray || [];
+      
+      if (tenders.length === 0) {
+        console.log('API returned no tenders');
+        return {
+          success: true,
+          message: 'API returned 0 tenders to sync',
+          stats: {
+            total: 0,
+            added: 0,
+            updated: 0,
+            failed: 0
+          }
+        };
+      }
       
       console.log(`Retrieved ${tenders.length} tenders from API`);
+      console.log('Sample tender data structure:', JSON.stringify(tenders[0]).substring(0, 500));
       
       // Process tenders and index to Elasticsearch
       const stats = {
@@ -244,6 +303,13 @@ export async function syncTenders(settings?: SyncSettings) {
       const bulkBody = [];
       
       for (const tender of tenders) {
+        // Verify tender has required properties
+        if (!tender.tenderId && !tender.tenderIdString && !tender.referenceNumber) {
+          console.warn('Skipping tender without ID:', JSON.stringify(tender).substring(0, 200));
+          stats.failed++;
+          continue;
+        }
+        
         // Prepare document ID
         const docId = tender.tenderId?.toString() || 
                        tender.tenderIdString ||
@@ -268,36 +334,48 @@ export async function syncTenders(settings?: SyncSettings) {
       }
       
       if (bulkBody.length > 0) {
-        // Execute bulk operation
-        const bulkResponse = await elasticClient.bulk({
-          refresh: true,
-          body: bulkBody
-        });
+        console.log(`Preparing to bulk index ${bulkBody.length / 2} documents to Elasticsearch`);
         
-        // Process results
-        if (bulkResponse.errors) {
-          // Some documents failed
-          bulkResponse.items.forEach(item => {
-            if (item.index?.status && item.index.status >= 200 && item.index.status < 300) {
-              if (item.index.result === 'created') {
+        try {
+          // Execute bulk operation
+          const bulkResponse = await elasticClient.bulk({
+            refresh: true,
+            body: bulkBody
+          });
+          
+          // Process results
+          if (bulkResponse.errors) {
+            // Some documents failed
+            bulkResponse.items.forEach(item => {
+              if (item.index?.status && item.index.status >= 200 && item.index.status < 300) {
+                if (item.index.result === 'created') {
+                  stats.added++;
+                } else if (item.index.result === 'updated') {
+                  stats.updated++;
+                }
+              } else {
+                stats.failed++;
+                console.error('Elasticsearch indexing error:', item.index?.error);
+              }
+            });
+          } else {
+            // All documents succeeded
+            bulkResponse.items.forEach(item => {
+              if (item.index?.result === 'created') {
                 stats.added++;
-              } else if (item.index.result === 'updated') {
+              } else if (item.index?.result === 'updated') {
                 stats.updated++;
               }
-            } else {
-              stats.failed++;
-              console.error('Indexing error:', item.index?.error);
-            }
-          });
-        } else {
-          // All documents succeeded
-          bulkResponse.items.forEach(item => {
-            if (item.index?.result === 'created') {
-              stats.added++;
-            } else if (item.index?.result === 'updated') {
-              stats.updated++;
-            }
-          });
+            });
+          }
+          
+          console.log(`Elasticsearch indexing completed: ${stats.added} added, ${stats.updated} updated, ${stats.failed} failed`);
+        } catch (bulkError) {
+          console.error('Elasticsearch bulk indexing error:', bulkError);
+          return {
+            success: false,
+            message: `Error indexing to Elasticsearch: ${(bulkError as Error).message}`
+          };
         }
       }
       
